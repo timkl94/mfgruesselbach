@@ -17,6 +17,7 @@ import io
 import logging
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 import schedule
@@ -37,6 +38,9 @@ CAR_CONFIDENCE_THRESHOLD = 0.5  # Mindest-Konfidenz (0–1) für eine Erkennung
 # YOLO-Modellvariante: yolov8n.pt (nano) ist am schnellsten;
 # für höhere Genauigkeit: yolov8s.pt, yolov8m.pt, yolov8l.pt oder yolov8x.pt
 YOLO_MODEL = "yolov8n.pt"
+
+# Zeitzone für Benachrichtigungen
+TIMEZONE = ZoneInfo("Europe/Berlin")
 
 # Fahrzeug-Klassen aus dem COCO-Datensatz (wird von YOLOv8 verwendet)
 VEHICLE_CLASSES = {
@@ -111,7 +115,7 @@ def notify(detections: list[dict]) -> None:
     werden (z. B. über smtplib, Pushover, Telegram …).
     """
     count = len(detections)
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(tz=TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     lines = [
         "",
