@@ -27,9 +27,16 @@ from ultralytics import YOLO
 # Konfiguration
 # ---------------------------------------------------------------------------
 
+# Hinweis: Die URL verwendet HTTP (kein HTTPS), da dies die vom Betreiber
+# bereitgestellte Adresse ist. Falls der Server HTTPS unterstützt, bitte
+# das Protokoll entsprechend anpassen.
 IMAGE_URL = "http://raar.myds.me/webcam/rb/rb.jpg"
 CHECK_INTERVAL_MINUTES = 15
 CAR_CONFIDENCE_THRESHOLD = 0.5  # Mindest-Konfidenz (0–1) für eine Erkennung
+
+# YOLO-Modellvariante: yolov8n.pt (nano) ist am schnellsten;
+# für höhere Genauigkeit: yolov8s.pt, yolov8m.pt, yolov8l.pt oder yolov8x.pt
+YOLO_MODEL = "yolov8n.pt"
 
 # Fahrzeug-Klassen aus dem COCO-Datensatz (wird von YOLOv8 verwendet)
 VEHICLE_CLASSES = {
@@ -156,7 +163,7 @@ def check_for_vehicles(model: YOLO) -> None:
 def main() -> None:
     logger.info("Starte Webcam-Fahrzeugerkennung …")
     logger.info("Lade YOLOv8-Modell (yolov8n.pt) …")
-    model = YOLO("yolov8n.pt")
+    model = YOLO(YOLO_MODEL)
 
     # Sofortige erste Prüfung beim Start
     check_for_vehicles(model)
