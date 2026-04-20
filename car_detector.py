@@ -117,7 +117,7 @@ def send_startup_notification() -> None:
             NTFY_TOPIC_URL,
             data="Webcam-Fahrzeugerkennung gestartet.".encode("utf-8"),
             headers={
-                "Title": "MFG Rüsselbach – Skript gestartet",
+                "Title": "MFG Ruesselbach - Skript gestartet",
                 "Priority": "default",
                 "Tags": "white_check_mark",
             },
@@ -163,7 +163,7 @@ def notify(detections: list[dict]) -> None:
             NTFY_TOPIC_URL,
             data=ntfy_message.encode("utf-8"),
             headers={
-                "Title": f"MFG Rüsselbach – {count} Fahrzeug(e) erkannt",
+                "Title": f"MFG Ruesselbach - {count} Fahrzeug(e) erkannt",
                 "Priority": "default",
                 "Tags": "car",
             },
