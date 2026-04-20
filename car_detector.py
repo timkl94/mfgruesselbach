@@ -157,10 +157,7 @@ def notify(detections: list[dict]) -> None:
     logger.info("Benachrichtigung: %d Fahrzeug(e) erkannt.", count)
 
     # Push-Benachrichtigung via ntfy
-    vehicle_summary = ", ".join(
-        f"{det['class']} ({det['confidence']:.0%})" for det in detections
-    )
-    ntfy_message = f"{count} Fahrzeug(e) erkannt: {vehicle_summary}"
+    ntfy_message = f"{count} Fahrzeug(e) erkannt"
     try:
         requests.post(
             NTFY_TOPIC_URL,
