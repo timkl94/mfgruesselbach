@@ -110,6 +110,24 @@ def detect_vehicles(
     return detections
 
 
+def send_startup_notification() -> None:
+    """Sendet eine Push-Benachrichtigung beim Skriptstart via ntfy."""
+    try:
+        requests.post(
+            NTFY_TOPIC_URL,
+            data="Webcam-Fahrzeugerkennung gestartet.".encode("utf-8"),
+            headers={
+                "Title": "MFG Rüsselbach – Skript gestartet",
+                "Priority": "default",
+                "Tags": "white_check_mark",
+            },
+            timeout=10,
+        )
+        logger.info("Start-Benachrichtigung via ntfy gesendet.")
+    except requests.RequestException as exc:
+        logger.warning("Start-Benachrichtigung fehlgeschlagen: %s", exc)
+
+
 def notify(detections: list[dict]) -> None:
     """
     Benachrichtigung ausgeben, wenn Fahrzeuge erkannt wurden.
@@ -191,6 +209,9 @@ def main() -> None:
     logger.info("Starte Webcam-Fahrzeugerkennung …")
     logger.info("Lade YOLOv8-Modell (yolov8n.pt) …")
     model = YOLO(YOLO_MODEL)
+
+    # Push-Benachrichtigung beim Start senden
+    send_startup_notification()
 
     # Sofortige erste Prüfung beim Start
     check_for_vehicles(model)
