@@ -42,6 +42,9 @@ YOLO_MODEL = "yolov8n.pt"
 # Zeitzone für Benachrichtigungen
 TIMEZONE = ZoneInfo("Europe/Berlin")
 
+# ntfy-Kanal für Push-Benachrichtigungen ans iPhone
+NTFY_TOPIC_URL = "https://ntfy.sh/mfgRuesselbachAktuellePiloten"
+
 # Fahrzeug-Klassen aus dem COCO-Datensatz (wird von YOLOv8 verwendet)
 VEHICLE_CLASSES = {
     2: "Auto",
@@ -134,6 +137,26 @@ def notify(detections: list[dict]) -> None:
 
     print("\n".join(lines))
     logger.info("Benachrichtigung: %d Fahrzeug(e) erkannt.", count)
+
+    # Push-Benachrichtigung via ntfy
+    vehicle_summary = ", ".join(
+        f"{det['class']} ({det['confidence']:.0%})" for det in detections
+    )
+    ntfy_message = f"{count} Fahrzeug(e) erkannt: {vehicle_summary}"
+    try:
+        requests.post(
+            NTFY_TOPIC_URL,
+            data=ntfy_message.encode("utf-8"),
+            headers={
+                "Title": f"MFG Rüsselbach – {count} Fahrzeug(e) erkannt",
+                "Priority": "default",
+                "Tags": "car",
+            },
+            timeout=10,
+        )
+        logger.info("Push-Benachrichtigung via ntfy gesendet.")
+    except requests.RequestException as exc:
+        logger.warning("ntfy-Benachrichtigung fehlgeschlagen: %s", exc)
 
 
 # ---------------------------------------------------------------------------

@@ -104,6 +104,78 @@ In `car_detector.py` können folgende Werte oben in der Datei angepasst werden:
 
 ---
 
+## Autostart auf Ubuntu-Server (systemd)
+
+Damit das Skript beim Hochfahren des Servers automatisch im Hintergrund startet und bei einem Absturz automatisch neu gestartet wird, empfiehlt sich ein **systemd-Dienst**.
+
+### Schritt 1 – Absoluten Pfad zu Python und Skript ermitteln
+
+```bash
+# Im Projektordner (mit aktivierter virtueller Umgebung):
+which python3          # z. B. /home/ubuntu/mfgruesselbach/.venv/bin/python3
+realpath car_detector.py  # z. B. /home/ubuntu/mfgruesselbach/car_detector.py
+```
+
+### Schritt 2 – Service-Datei erstellen
+
+```bash
+sudo nano /etc/systemd/system/mfgruesselbach.service
+```
+
+Folgenden Inhalt einfügen (Pfade und Benutzername anpassen):
+
+```ini
+[Unit]
+Description=MFG Rüsselbach – Webcam-Fahrzeugerkennung
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/mfgruesselbach
+ExecStart=/home/ubuntu/mfgruesselbach/.venv/bin/python3 /home/ubuntu/mfgruesselbach/car_detector.py
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> **Hinweis:** `User` und die Pfade unter `WorkingDirectory` sowie `ExecStart` müssen mit dem eigenen Serverbenutzernamen und dem tatsächlichen Installationsordner übereinstimmen.
+
+### Schritt 3 – Dienst aktivieren und starten
+
+```bash
+# systemd neu laden, damit die neue Datei erkannt wird
+sudo systemctl daemon-reload
+
+# Dienst beim Systemstart automatisch aktivieren
+sudo systemctl enable mfgruesselbach.service
+
+# Dienst sofort starten
+sudo systemctl start mfgruesselbach.service
+```
+
+### Schritt 4 – Status prüfen
+
+```bash
+sudo systemctl status mfgruesselbach.service
+```
+
+Die Ausgabe sollte `active (running)` zeigen.
+
+### Nützliche Befehle
+
+| Befehl | Beschreibung |
+|--------|--------------|
+| `sudo systemctl stop mfgruesselbach.service` | Dienst stoppen |
+| `sudo systemctl restart mfgruesselbach.service` | Dienst neu starten |
+| `sudo journalctl -u mfgruesselbach.service -f` | Live-Logs anzeigen |
+| `sudo journalctl -u mfgruesselbach.service --since today` | Log des heutigen Tages |
+
+---
+
 ## Erweiterungen
 
 Für **E-Mail- oder App-Benachrichtigungen** die Funktion `notify()` in `car_detector.py` anpassen –  
