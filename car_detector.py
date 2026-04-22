@@ -13,15 +13,17 @@ Erweiterungen:
     am Ende dieser Datei anpassen.
 """
 
+import glob
 import io
 import logging
+import os
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import requests
 import schedule
-from PIL import Image
+from PIL import Image, ImageDraw
 from ultralytics import YOLO
 
 # ---------------------------------------------------------------------------
@@ -52,6 +54,16 @@ VEHICLE_CLASSES = {
     5: "Bus",
     7: "LKW",
 }
+
+# Ordner für gespeicherte Bilder
+DETECTION_FOLDER = "Fahrzeug erkannt"   # Bilder mit erkannten Fahrzeugen
+EMPTY_FOLDER = "Kein Fahrzeug"          # Bilder ohne Fahrzeugerkennung
+MAX_DETECTION_IMAGES = 20               # Maximale Anzahl gespeicherter Erkennungsbilder
+MAX_EMPTY_IMAGES = 30                   # Maximale Anzahl gespeicherter Leerbilder
+
+# Farbe des Rahmens um erkannte Fahrzeuge
+BBOX_COLOR = (255, 0, 0)    # Rot
+BBOX_WIDTH = 3              # Linienbreite in Pixeln
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -110,6 +122,58 @@ def detect_vehicles(
     return detections
 
 
+def _prune_folder(folder: str, max_files: int) -> None:
+    """Löscht die ältesten Bilder, wenn die Ordner-Grenze überschritten wird."""
+    files = sorted(glob.glob(os.path.join(folder, "*.jpg")))
+    while len(files) > max_files:
+        os.remove(files.pop(0))
+
+
+def save_detection_image(image: Image.Image, detections: list[dict]) -> None:
+    """
+    Speichert das Bild mit farbigen Bounding-Boxen in ``DETECTION_FOLDER``.
+    Hält maximal ``MAX_DETECTION_IMAGES`` Bilder vor.
+    """
+    os.makedirs(DETECTION_FOLDER, exist_ok=True)
+
+    annotated = image.copy()
+    draw = ImageDraw.Draw(annotated)
+    for det in detections:
+        x1, y1, x2, y2 = det["bbox"]
+        draw.rectangle(
+            [x1, y1, x2, y2],
+            outline=BBOX_COLOR,
+            width=BBOX_WIDTH,
+        )
+        draw.text(
+            (x1, max(y1 - 14, 0)),
+            f"{det['class']} {det['confidence']:.0%}",
+            fill=BBOX_COLOR,
+        )
+
+    timestamp = datetime.now(tz=TIMEZONE).strftime("%Y%m%d_%H%M%S")
+    filepath = os.path.join(DETECTION_FOLDER, f"{timestamp}.jpg")
+    annotated.save(filepath, format="JPEG")
+    logger.info("Erkennungsbild gespeichert: %s", filepath)
+
+    _prune_folder(DETECTION_FOLDER, MAX_DETECTION_IMAGES)
+
+
+def save_empty_image(image: Image.Image) -> None:
+    """
+    Speichert das Bild ohne Erkennungen in ``EMPTY_FOLDER``.
+    Hält maximal ``MAX_EMPTY_IMAGES`` Bilder vor.
+    """
+    os.makedirs(EMPTY_FOLDER, exist_ok=True)
+
+    timestamp = datetime.now(tz=TIMEZONE).strftime("%Y%m%d_%H%M%S")
+    filepath = os.path.join(EMPTY_FOLDER, f"{timestamp}.jpg")
+    image.save(filepath, format="JPEG")
+    logger.info("Leerbild gespeichert: %s", filepath)
+
+    _prune_folder(EMPTY_FOLDER, MAX_EMPTY_IMAGES)
+
+
 def send_startup_notification() -> None:
     """Sendet eine Push-Benachrichtigung beim Skriptstart via ntfy."""
     try:
@@ -132,40 +196,60 @@ def notify(detections: list[dict]) -> None:
     """
     Benachrichtigung ausgeben, wenn Fahrzeuge erkannt wurden.
 
+    Wird nur aufgerufen, wenn sich die Fahrzeuganzahl geändert hat.
     Hier kann später eine E-Mail- oder App-Benachrichtigung eingebunden
     werden (z. B. über smtplib, Pushover, Telegram …).
     """
     count = len(detections)
     timestamp = datetime.now(tz=TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
 
-    lines = [
-        "",
-        "=" * 60,
-        f"  TESTMITTEILUNG – {timestamp}",
-        f"  {count} Fahrzeug(e) im Webcam-Bild erkannt!",
-        "-" * 60,
-    ]
-    for i, det in enumerate(detections, start=1):
-        lines.append(
-            f"  {i}. {det['class']}  "
-            f"(Konfidenz: {det['confidence']:.0%})"
-        )
-    lines.append("=" * 60)
-    lines.append("")
+    if count == 0:
+        lines = [
+            "",
+            "=" * 60,
+            f"  TESTMITTEILUNG – {timestamp}",
+            "  Kein Fahrzeug mehr im Webcam-Bild erkennbar.",
+            "=" * 60,
+            "",
+        ]
+        print("\n".join(lines))
+        logger.info("Benachrichtigung: Kein Fahrzeug mehr erkannt.")
 
-    print("\n".join(lines))
-    logger.info("Benachrichtigung: %d Fahrzeug(e) erkannt.", count)
+        ntfy_message = "Kein Fahrzeug mehr erkannt"
+        ntfy_title = "MFG Ruesselbach - Kein Fahrzeug"
+        ntfy_tags = "white_check_mark"
+    else:
+        lines = [
+            "",
+            "=" * 60,
+            f"  TESTMITTEILUNG – {timestamp}",
+            f"  {count} Fahrzeug(e) im Webcam-Bild erkannt!",
+            "-" * 60,
+        ]
+        for i, det in enumerate(detections, start=1):
+            lines.append(
+                f"  {i}. {det['class']}  "
+                f"(Konfidenz: {det['confidence']:.0%})"
+            )
+        lines.append("=" * 60)
+        lines.append("")
+
+        print("\n".join(lines))
+        logger.info("Benachrichtigung: %d Fahrzeug(e) erkannt.", count)
+
+        ntfy_message = f"{count} Fahrzeug(e) erkannt"
+        ntfy_title = f"MFG Ruesselbach - {count} Fahrzeug(e) erkannt"
+        ntfy_tags = "car"
 
     # Push-Benachrichtigung via ntfy
-    ntfy_message = f"{count} Fahrzeug(e) erkannt"
     try:
         requests.post(
             NTFY_TOPIC_URL,
             data=ntfy_message.encode("utf-8"),
             headers={
-                "Title": f"MFG Ruesselbach - {count} Fahrzeug(e) erkannt",
+                "Title": ntfy_title,
                 "Priority": "default",
-                "Tags": "car",
+                "Tags": ntfy_tags,
             },
             timeout=10,
         )
@@ -178,9 +262,14 @@ def notify(detections: list[dict]) -> None:
 # Haupt-Prüfschleife
 # ---------------------------------------------------------------------------
 
+# Zuletzt gemeldete Fahrzeuganzahl; -1 = noch keine Meldung gesendet
+_last_notified_count: int = -1
+
 
 def check_for_vehicles(model: YOLO) -> None:
     """Bild abrufen, analysieren und ggf. benachrichtigen."""
+    global _last_notified_count
+
     logger.info("Überprüfe Webcam-Bild (%s) …", IMAGE_URL)
 
     try:
@@ -190,11 +279,32 @@ def check_for_vehicles(model: YOLO) -> None:
         return
 
     detections = detect_vehicles(image, model)
+    count = len(detections)
 
+    # Bilder immer speichern
     if detections:
-        notify(detections)
+        save_detection_image(image, detections)
     else:
-        logger.info("Keine Fahrzeuge erkannt.")
+        save_empty_image(image)
+
+    # Benachrichtigung nur senden, wenn sich die Anzahl geändert hat;
+    # beim ersten Durchlauf (_last_notified_count == -1) nur bei Fahrzeugen.
+    if count != _last_notified_count:
+        if count > 0:
+            notify(detections)
+            _last_notified_count = count
+        elif _last_notified_count > 0:
+            # Anzahl ist auf 0 gesunken → "kein Fahrzeug mehr"-Meldung
+            notify([])
+            _last_notified_count = 0
+        else:
+            # _last_notified_count war -1 und count ist 0: keine Meldung
+            _last_notified_count = 0
+            logger.info("Keine Fahrzeuge erkannt.")
+    else:
+        logger.info(
+            "Fahrzeuganzahl unverändert (%d) – keine neue Benachrichtigung.", count
+        )
 
 
 # ---------------------------------------------------------------------------
