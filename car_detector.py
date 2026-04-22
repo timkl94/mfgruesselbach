@@ -64,6 +64,7 @@ MAX_EMPTY_IMAGES = 30                   # Maximale Anzahl gespeicherter Leerbild
 # Farbe des Rahmens um erkannte Fahrzeuge
 BBOX_COLOR = (255, 0, 0)    # Rot
 BBOX_WIDTH = 3              # Linienbreite in Pixeln
+BBOX_TEXT_OFFSET = 14       # Pixel-Abstand des Beschriftungstexts oberhalb der Box
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -124,7 +125,10 @@ def detect_vehicles(
 
 def _prune_folder(folder: str, max_files: int) -> None:
     """Löscht die ältesten Bilder, wenn die Ordner-Grenze überschritten wird."""
-    files = sorted(glob.glob(os.path.join(folder, "*.jpg")))
+    files = sorted(
+        glob.glob(os.path.join(folder, "*.jpg")),
+        key=os.path.getmtime,
+    )
     while len(files) > max_files:
         os.remove(files.pop(0))
 
@@ -146,7 +150,7 @@ def save_detection_image(image: Image.Image, detections: list[dict]) -> None:
             width=BBOX_WIDTH,
         )
         draw.text(
-            (x1, max(y1 - 14, 0)),
+            (x1, max(y1 - BBOX_TEXT_OFFSET, 0)),
             f"{det['class']} {det['confidence']:.0%}",
             fill=BBOX_COLOR,
         )
