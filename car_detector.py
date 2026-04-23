@@ -56,6 +56,11 @@ VEHICLE_CLASSES = {
     7: "LKW",
 }
 
+# Nachtruhe: Keine Bildabrufe zwischen 22 Uhr und 6 Uhr (Berliner Ortszeit,
+# DST-bewusst dank ZoneInfo – gilt also sowohl für Sommer- als auch Winterzeit)
+QUIET_HOURS_START = 22   # ab 22:00 Uhr keine Abrufe
+QUIET_HOURS_END = 6      # bis 06:00 Uhr keine Abrufe
+
 # Ordner für gespeicherte Bilder
 DETECTION_FOLDER = "Fahrzeug erkannt"   # Bilder mit erkannten Fahrzeugen
 EMPTY_FOLDER = "Kein Fahrzeug"          # Bilder ohne Fahrzeugerkennung
@@ -271,9 +276,28 @@ def notify(detections: list[dict]) -> None:
 _last_notified_count: int = -1
 
 
+def is_quiet_hours() -> bool:
+    """Gibt True zurück, wenn die aktuelle Berliner Ortszeit in der Nachtruhe liegt.
+
+    Die Nachtruhe dauert von QUIET_HOURS_START (22 Uhr) bis QUIET_HOURS_END (6 Uhr).
+    ZoneInfo("Europe/Berlin") berücksichtigt automatisch Sommer- und Winterzeit,
+    sodass die Uhrzeit immer der lokalen Berliner Zeit entspricht.
+    """
+    hour = datetime.now(tz=TIMEZONE).hour
+    return hour >= QUIET_HOURS_START or hour < QUIET_HOURS_END
+
+
 def check_for_vehicles(model: YOLO) -> None:
     """Bild abrufen, analysieren und ggf. benachrichtigen."""
     global _last_notified_count
+
+    if is_quiet_hours():
+        logger.info(
+            "Nachtruhe (%d–%d Uhr Berliner Zeit) – kein Bildabruf.",
+            QUIET_HOURS_START,
+            QUIET_HOURS_END,
+        )
+        return
 
     logger.info("Überprüfe Webcam-Bild (%s) …", IMAGE_URL)
 
