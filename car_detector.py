@@ -35,11 +35,12 @@ from ultralytics import YOLO
 # das Protokoll entsprechend anpassen.
 IMAGE_URL = "http://raar.myds.me/webcam/rb/rb.jpg"
 CHECK_INTERVAL_MINUTES = 15
-CAR_CONFIDENCE_THRESHOLD = 0.5  # Mindest-Konfidenz (0–1) für eine Erkennung
+CAR_CONFIDENCE_THRESHOLD = 0.3  # Mindest-Konfidenz (0–1) für eine Erkennung
 
-# YOLO-Modellvariante: yolov8n.pt (nano) ist am schnellsten;
-# für höhere Genauigkeit: yolov8s.pt, yolov8m.pt, yolov8l.pt oder yolov8x.pt
-YOLO_MODEL = "yolov8n.pt"
+# YOLO-Modellvariante: yolov8s.pt (small) bietet deutlich bessere Erkennung
+# kleiner/weit entfernter Fahrzeuge als das nano-Modell;
+# für noch höhere Genauigkeit: yolov8m.pt, yolov8l.pt oder yolov8x.pt
+YOLO_MODEL = "yolov8s.pt"
 
 # Zeitzone für Benachrichtigungen
 TIMEZONE = ZoneInfo("Europe/Berlin")
@@ -103,7 +104,7 @@ def detect_vehicles(
     - ``confidence``: Erkennungs-Konfidenz (0–1)
     - ``bbox``:       Bounding Box [x1, y1, x2, y2]
     """
-    results = model(image, verbose=False)
+    results = model(image, verbose=False, imgsz=1280)
     detections: list[dict] = []
 
     for result in results:
@@ -318,7 +319,7 @@ def check_for_vehicles(model: YOLO) -> None:
 
 def main() -> None:
     logger.info("Starte Webcam-Fahrzeugerkennung …")
-    logger.info("Lade YOLOv8-Modell (yolov8n.pt) …")
+    logger.info("Lade YOLOv8-Modell (%s) …", YOLO_MODEL)
     model = YOLO(YOLO_MODEL)
 
     # Push-Benachrichtigung beim Start senden
