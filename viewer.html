@@ -475,7 +475,7 @@
 
   function loadFromServerData(data) {
     allImages = data.map(item => {
-      const hasVehicles = item.folder === 'Fahrzeug erkannt';
+      const hasVehicles = item.folder === 'Fahrzeug_erkannt';
       const base = item.filename.replace(/\.(jpg|jpeg)$/i, '');
       return {
         key:         item.folder + '/' + base,
