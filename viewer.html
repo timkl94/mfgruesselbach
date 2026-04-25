@@ -379,7 +379,7 @@
   <header>
     <div class="header-title">🚗 MFG Rüsselbach · Fahrzeugauswertung</div>
     <button class="btn-refresh" id="btnRefresh" title="Bilder neu laden">↺ Aktualisieren</button>
-    <label class="btn-folder" id="btnFolder" title="Projektordner öffnen">
+    <label class="btn-folder" id="btnFolder" title="Projektordner öffnen" style="display:none">
       📁 Ordner öffnen
       <input type="file" id="folderInput" webkitdirectory multiple>
     </label>
@@ -402,18 +402,19 @@
     <div id="main">
       <!-- Welcome -->
       <div id="welcome">
-        <div class="wicon">📂</div>
-        <h2>Bilder laden</h2>
+        <div class="wicon" id="welcome-icon">⏳</div>
+        <h2 id="welcome-title">Verbinde mit Server…</h2>
+        <p id="welcome-loading">Bilder werden automatisch geladen.</p>
         <p id="welcome-server" style="display:none">
           Noch keine Bilder vorhanden. Sobald das Python-Skript
           <strong>car_detector.py</strong> Aufnahmen speichert, erscheinen sie hier.
           Klicke auf <strong>↺ Aktualisieren</strong> um die Ansicht zu aktualisieren.
         </p>
-        <p id="welcome-file">
-          Klicke auf <strong>Ordner öffnen</strong> und wähle den Ordner
-          <strong>mfgruesselbach</strong> aus.
+        <p id="welcome-file" style="display:none">
+          Kein Server gefunden. Starte <strong>python server.py</strong> im Projektordner
+          für automatisches Laden – oder öffne den Ordner manuell:
         </p>
-        <p class="hint" id="welcome-hint-file">
+        <p class="hint" id="welcome-hint-file" style="display:none">
           Die Bilder befinden sich in den Unterordnern
           <em>Fahrzeug erkannt</em> und <em>Kein Fahrzeug</em>.
         </p>
@@ -491,18 +492,24 @@
   async function tryAutoLoad() {
     try {
       const resp = await fetch('/api/images');
-      if (!resp.ok) return;
+      if (!resp.ok) throw new Error('not ok');
       const data = await resp.json();
       serverMode = true;
       // UI auf Server-Modus umschalten
-      document.getElementById('btnFolder').style.display  = 'none';
       document.getElementById('btnRefresh').classList.add('visible');
-      document.getElementById('welcome-file').style.display      = 'none';
-      document.getElementById('welcome-hint-file').style.display = 'none';
+      document.getElementById('welcome-loading').style.display   = 'none';
       document.getElementById('welcome-server').style.display    = '';
+      document.getElementById('welcome-icon').textContent        = '📂';
+      document.getElementById('welcome-title').textContent       = 'Keine Bilder vorhanden';
       loadFromServerData(data);
     } catch (_) {
-      // Kein Server erreichbar – Datei-Picker-Modus bleibt aktiv
+      // Kein Server erreichbar – auf Datei-Picker-Modus umschalten
+      document.getElementById('welcome-loading').style.display   = 'none';
+      document.getElementById('welcome-icon').textContent        = '📂';
+      document.getElementById('welcome-title').textContent       = 'Bilder laden';
+      document.getElementById('welcome-file').style.display      = '';
+      document.getElementById('welcome-hint-file').style.display = '';
+      document.getElementById('btnFolder').style.display         = '';
     }
   }
 
