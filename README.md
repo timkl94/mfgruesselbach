@@ -68,6 +68,22 @@ Mit **Strg + C** wird das Programm beendet.
 
 ---
 
+### `server.py` – Bild-Viewer im Browser
+
+Startet einen lokalen Webserver und öffnet den Viewer automatisch im Browser.  
+Die gespeicherten Bilder werden **ohne manuelle Ordnerauswahl** sofort angezeigt.
+
+```bash
+python server.py
+```
+
+Danach öffnet sich automatisch **http://localhost:8080** im Browser.  
+Mit **Strg + C** wird der Server beendet.
+
+> **Tipp:** Starte `car_detector.py` und `server.py` gleichzeitig in zwei Terminalfenstern.
+
+---
+
 ### `show_detections.py` – Testmodus mit Bild-Visualisierung
 
 Lädt das aktuelle Webcam-Bild **einmalig** herunter, erkennt Fahrzeuge und  
