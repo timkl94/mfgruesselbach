@@ -85,6 +85,24 @@
       position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
     }
 
+    .btn-refresh {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.40);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: .88rem;
+      font-weight: 500;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn-refresh:hover { background: rgba(255,255,255,.28); }
+    .btn-refresh.visible { display: inline-flex; }
+
     .filter-group {
       display: flex;
       gap: 6px;
@@ -360,7 +378,8 @@
   <!-- ── Header ────────────────────────────────────────────────── -->
   <header>
     <div class="header-title">🚗 MFG Rüsselbach · Fahrzeugauswertung</div>
-    <label class="btn-folder" title="Projektordner öffnen">
+    <button class="btn-refresh" id="btnRefresh" title="Bilder neu laden">↺ Aktualisieren</button>
+    <label class="btn-folder" id="btnFolder" title="Projektordner öffnen">
       📁 Ordner öffnen
       <input type="file" id="folderInput" webkitdirectory multiple>
     </label>
@@ -385,11 +404,18 @@
       <div id="welcome">
         <div class="wicon">📂</div>
         <h2>Bilder laden</h2>
-        <p>
-          Klicke auf <strong>Ordner öffnen</strong> und wähle den Ordner
-          <strong>mfgruesselbach</strong> (oder einen übergeordneten Ordner) aus.
+        <p id="welcome-server" style="display:none">
+          Noch keine Bilder vorhanden. Sobald das Python-Skript
+          <strong>car_detector.py</strong> Aufnahmen speichert, erscheinen sie hier.
+          Klicke auf <strong>↺ Aktualisieren</strong> um die Ansicht zu aktualisieren.
         </p>
-        <p class="hint">
+        <p id="welcome-file">
+          Starte den Viewer mit <code>python server.py</code> – dann werden die
+          Bilder automatisch geladen.<br><br>
+          Alternativ: Klicke auf <strong>Ordner öffnen</strong> und wähle den Ordner
+          <strong>mfgruesselbach</strong> aus.
+        </p>
+        <p class="hint" id="welcome-hint-file">
           Die Bilder befinden sich in den Unterordnern
           <em>Fahrzeug erkannt</em> und <em>Kein Fahrzeug</em>.
         </p>
@@ -458,10 +484,70 @@
   let allImages   = [];   // alle geladenen Bild-Einträge
   let filter      = 'all';
   let selectedIdx = null;
-  const blobUrls  = {};   // key → Blob-URL (gecacht)
+  const blobUrls  = {};   // key → Blob-URL (gecacht, nur Datei-Picker-Modus)
+  let serverMode  = false; // true wenn via server.py bedient
 
   /* ================================================================
-     Ordner laden
+     Server-Modus: automatisches Laden beim Start
+  ================================================================ */
+  async function tryAutoLoad() {
+    try {
+      const resp = await fetch('/api/images');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      serverMode = true;
+      // UI auf Server-Modus umschalten
+      document.getElementById('btnFolder').style.display  = 'none';
+      document.getElementById('btnRefresh').classList.add('visible');
+      document.getElementById('welcome-file').style.display      = 'none';
+      document.getElementById('welcome-hint-file').style.display = 'none';
+      document.getElementById('welcome-server').style.display    = '';
+      loadFromServerData(data);
+    } catch (_) {
+      // Kein Server erreichbar – Datei-Picker-Modus bleibt aktiv
+    }
+  }
+
+  function loadFromServerData(data) {
+    allImages = data.map(item => {
+      const hasVehicles = item.folder === 'Fahrzeug erkannt';
+      const base = item.filename.replace(/\.(jpg|jpeg)$/i, '');
+      return {
+        key:         item.folder + '/' + base,
+        folder:      item.folder,
+        base,
+        hasVehicles,
+        meta:        item.meta,
+        imgFile:     null,           // nicht verfügbar im Server-Modus
+        url:         item.url,       // direkter URL-Pfad
+      };
+    });
+    selectedIdx = allImages.length > 0 ? 0 : null;
+
+    renderSidebar();
+    if (selectedIdx !== null) showDetail(selectedIdx);
+    renderStats();
+
+    document.getElementById('stats-section').style.display =
+      allImages.length > 0 ? 'block' : 'none';
+
+    if (allImages.length > 0) {
+      document.getElementById('welcome').style.display = 'none';
+    } else {
+      document.getElementById('welcome').style.display = '';
+    }
+  }
+
+  document.getElementById('btnRefresh').addEventListener('click', async () => {
+    try {
+      const resp = await fetch('/api/images');
+      if (!resp.ok) return;
+      loadFromServerData(await resp.json());
+    } catch (_) { /* ignore */ }
+  });
+
+  /* ================================================================
+     Ordner laden (Datei-Picker-Modus – Fallback)
   ================================================================ */
   document.getElementById('folderInput').addEventListener('change', async (e) => {
     // Alte Blob-URLs freigeben
@@ -647,10 +733,16 @@
       : rec.base;
     document.getElementById('viewerDatetime').textContent = '📅 ' + dtStr;
 
-    // Bild (Blob-URL gecacht)
-    if (!blobUrls[rec.key]) blobUrls[rec.key] = URL.createObjectURL(rec.imgFile);
+    // Bild anzeigen
     const img = document.getElementById('viewerImg');
-    img.src = blobUrls[rec.key];
+    if (rec.url) {
+      // Server-Modus: direkte URL
+      img.src = rec.url;
+    } else {
+      // Datei-Picker-Modus: Blob-URL gecacht
+      if (!blobUrls[rec.key]) blobUrls[rec.key] = URL.createObjectURL(rec.imgFile);
+      img.src = blobUrls[rec.key];
+    }
     img.alt = 'Webcam ' + dtStr;
 
     // Benachrichtigung
@@ -881,6 +973,9 @@
       if (allImages.length > 0) renderStats();
     }, 200);
   });
+
+  // Beim Start versuchen, Bilder automatisch vom Server zu laden
+  tryAutoLoad();
   </script>
 </body>
 </html>
