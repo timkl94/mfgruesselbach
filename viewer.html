@@ -64,27 +64,6 @@
       text-overflow: ellipsis;
     }
 
-    .btn-folder {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255,255,255,.18);
-      border: 1px solid rgba(255,255,255,.40);
-      color: #fff;
-      padding: 6px 14px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: .88rem;
-      font-weight: 500;
-      transition: background .15s;
-      white-space: nowrap;
-      position: relative;
-    }
-    .btn-folder:hover { background: rgba(255,255,255,.28); }
-    .btn-folder input[type="file"] {
-      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
-    }
-
     .btn-refresh {
       display: none;
       align-items: center;
@@ -363,7 +342,6 @@
       .right-col { grid-template-columns: 1fr; }
       header { gap: 8px; padding: 0 10px; }
       .header-title { font-size: .92rem; }
-      .btn-folder { padding: 5px 10px; font-size: .80rem; }
       .filter-btn { padding: 4px 9px; font-size: .75rem; }
       #stats-section { padding: 14px 14px 18px; }
     }
@@ -379,10 +357,6 @@
   <header>
     <div class="header-title">🚗 MFG Rüsselbach · Fahrzeugauswertung</div>
     <button class="btn-refresh" id="btnRefresh" title="Bilder neu laden">↺ Aktualisieren</button>
-    <label class="btn-folder" id="btnFolder" title="Projektordner öffnen" style="display:none">
-      📁 Ordner öffnen
-      <input type="file" id="folderInput" webkitdirectory multiple>
-    </label>
     <div class="filter-group" id="filterGroup">
       <button class="filter-btn active" data-f="all">Alle</button>
       <button class="filter-btn" data-f="vehicles">🚗 Fahrzeuge</button>
@@ -409,14 +383,6 @@
           Noch keine Bilder vorhanden. Sobald das Python-Skript
           <strong>car_detector.py</strong> Aufnahmen speichert, erscheinen sie hier.
           Klicke auf <strong>↺ Aktualisieren</strong> um die Ansicht zu aktualisieren.
-        </p>
-        <p id="welcome-file" style="display:none">
-          Kein Server gefunden. Starte <strong>python server.py</strong> im Projektordner
-          für automatisches Laden – oder öffne den Ordner manuell:
-        </p>
-        <p class="hint" id="welcome-hint-file" style="display:none">
-          Die Bilder befinden sich in den Unterordnern
-          <em>Fahrzeug erkannt</em> und <em>Kein Fahrzeug</em>.
         </p>
       </div>
 
@@ -483,8 +449,6 @@
   let allImages   = [];   // alle geladenen Bild-Einträge
   let filter      = 'all';
   let selectedIdx = null;
-  const blobUrls  = {};   // key → Blob-URL (gecacht, nur Datei-Picker-Modus)
-  let serverMode  = false; // true wenn via server.py bedient
 
   /* ================================================================
      Server-Modus: automatisches Laden beim Start
@@ -494,7 +458,6 @@
       const resp = await fetch('/api/images');
       if (!resp.ok) throw new Error('not ok');
       const data = await resp.json();
-      serverMode = true;
       // UI auf Server-Modus umschalten
       document.getElementById('btnRefresh').classList.add('visible');
       document.getElementById('welcome-loading').style.display   = 'none';
@@ -503,13 +466,10 @@
       document.getElementById('welcome-title').textContent       = 'Keine Bilder vorhanden';
       loadFromServerData(data);
     } catch (_) {
-      // Kein Server erreichbar – auf Datei-Picker-Modus umschalten
+      // Server nicht erreichbar
       document.getElementById('welcome-loading').style.display   = 'none';
-      document.getElementById('welcome-icon').textContent        = '📂';
-      document.getElementById('welcome-title').textContent       = 'Bilder laden';
-      document.getElementById('welcome-file').style.display      = '';
-      document.getElementById('welcome-hint-file').style.display = '';
-      document.getElementById('btnFolder').style.display         = '';
+      document.getElementById('welcome-icon').textContent        = '⚠️';
+      document.getElementById('welcome-title').textContent       = 'Server nicht erreichbar';
     }
   }
 
@@ -549,86 +509,6 @@
       if (!resp.ok) return;
       loadFromServerData(await resp.json());
     } catch (_) { /* ignore */ }
-  });
-
-  /* ================================================================
-     Ordner laden (Datei-Picker-Modus – Fallback)
-  ================================================================ */
-  document.getElementById('folderInput').addEventListener('change', async (e) => {
-    // Alte Blob-URLs freigeben
-    for (const u of Object.values(blobUrls)) URL.revokeObjectURL(u);
-    Object.keys(blobUrls).forEach(k => delete blobUrls[k]);
-
-    const files = Array.from(e.target.files);
-
-    const jsonMap = {};  // "Ordner/Dateiname-ohne-Ext" → File
-    const imgMap  = {};  // "Ordner/Dateiname-ohne-Ext" → File
-
-    for (const file of files) {
-      const parts    = file.webkitRelativePath.split('/');
-      const filename = parts[parts.length - 1];
-      const folder   = parts.length >= 2 ? parts[parts.length - 2] : '';
-      const base     = filename.replace(/\.(jpg|jpeg|json)$/i, '');
-      const key      = folder + '/' + base;
-
-      if (/\.(jpg|jpeg)$/i.test(filename)) {
-        imgMap[key] = file;
-      } else if (/\.json$/i.test(filename)) {
-        jsonMap[key] = file;
-      }
-    }
-
-    const records = [];
-
-    for (const [key, imgFile] of Object.entries(imgMap)) {
-      const slash      = key.indexOf('/');
-      const folder     = key.substring(0, slash);
-      const base       = key.substring(slash + 1);
-      const hasVehicles = folder === 'Fahrzeug erkannt';
-
-      // Nur bekannte Unterordner berücksichtigen
-      if (folder !== 'Fahrzeug erkannt' && folder !== 'Kein Fahrzeug') continue;
-
-      let meta = null;
-      if (jsonMap[key]) {
-        try {
-          meta = JSON.parse(await jsonMap[key].text());
-        } catch (_) { /* ungültiges JSON – ignorieren */ }
-      }
-
-      if (!meta) {
-        // Metadaten aus Dateiname ableiten
-        const dt = parseTimestamp(base);
-        meta = {
-          timestamp:        base,
-          datetime_display: dt ? fmtDate(dt) : base,
-          datetime_iso:     dt ? dt.toISOString() : base,
-          has_vehicles:     hasVehicles,
-          vehicle_count:    hasVehicles ? null : 0,
-          detections:       [],
-          notification_title:   null,
-          notification_message: null,
-        };
-      }
-
-      records.push({ key, folder, base, hasVehicles, meta, imgFile });
-    }
-
-    // Neueste zuerst
-    records.sort((a, b) =>
-      (b.meta.datetime_iso || b.base).localeCompare(a.meta.datetime_iso || a.base)
-    );
-
-    allImages   = records;
-    selectedIdx = records.length > 0 ? 0 : null;
-
-    renderSidebar();
-    if (selectedIdx !== null) showDetail(selectedIdx);
-    renderStats();
-
-    document.getElementById('welcome').style.display = 'none';
-    document.getElementById('stats-section').style.display =
-      allImages.length > 0 ? 'block' : 'none';
   });
 
   /* ================================================================
@@ -740,14 +620,7 @@
 
     // Bild anzeigen
     const img = document.getElementById('viewerImg');
-    if (rec.url) {
-      // Server-Modus: direkte URL
-      img.src = rec.url;
-    } else {
-      // Datei-Picker-Modus: Blob-URL gecacht
-      if (!blobUrls[rec.key]) blobUrls[rec.key] = URL.createObjectURL(rec.imgFile);
-      img.src = blobUrls[rec.key];
-    }
+    img.src = rec.url;
     img.alt = 'Webcam ' + dtStr;
 
     // Benachrichtigung
