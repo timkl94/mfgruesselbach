@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MFG Rüsselbach – Fahrzeugauswertung</title>
+  <style>
+    /* ── Reset & Variablen ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:        #1565c0;
+      --primary-dark:   #0d47a1;
+      --primary-light:  #e3f2fd;
+      --bg:             #f1f3f6;
+      --card:           #ffffff;
+      --border:         #dde1e7;
+      --text:           #1a1a2e;
+      --text-muted:     #6b7280;
+      --shadow-sm:      0 1px 4px rgba(0,0,0,.08);
+      --shadow:         0 2px 10px rgba(0,0,0,.10);
+      --radius:         10px;
+      /* Farben je Fahrzeugklasse – müssen mit car_detector.py übereinstimmen */
+      --c-auto:         rgb(255,50,50);
+      --c-motorrad:     rgb(255,165,0);
+      --c-bus:          rgb(50,200,50);
+      --c-lkw:          rgb(80,130,255);
+    }
+
+    html { font-size: 16px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                   'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ────────────────────────────────────────────────────── */
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: 0 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: .01em;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn-folder {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.40);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: .88rem;
+      font-weight: 500;
+      transition: background .15s;
+      white-space: nowrap;
+      position: relative;
+    }
+    .btn-folder:hover { background: rgba(255,255,255,.28); }
+    .btn-folder input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .filter-btn {
+      padding: 5px 13px;
+      border: 1px solid rgba(255,255,255,.45);
+      border-radius: 20px;
+      background: transparent;
+      color: rgba(255,255,255,.80);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 500;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover  { background: rgba(255,255,255,.20); color: #fff; }
+    .filter-btn.active { background: #fff; color: var(--primary); border-color: #fff; }
+
+    /* ── App layout (sidebar + main) ───────────────────────────────── */
+    #app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ───────────────────────────────────────────────────── */
+    #sidebar {
+      background: var(--card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    #sidebar-empty {
+      padding: 24px 16px;
+      color: var(--text-muted);
+      font-size: .9rem;
+      text-align: center;
+    }
+
+    .img-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background .12s;
+    }
+    .img-item:hover   { background: #f0f5ff; }
+    .img-item.active  {
+      background: var(--primary-light);
+      border-left: 3px solid var(--primary);
+      padding-left: 9px;
+    }
+
+    .item-icon { font-size: 1.25rem; flex-shrink: 0; }
+
+    .item-info { flex: 1; min-width: 0; }
+    .item-date {
+      font-size: .84rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .item-time { font-size: .78rem; color: var(--text-muted); }
+
+    .item-badge {
+      font-size: .73rem; font-weight: 600;
+      padding: 2px 8px; border-radius: 12px;
+      flex-shrink: 0;
+    }
+    .badge-v { background: #ffebee; color: #c62828; }
+    .badge-e { background: #f5f5f5; color: #757575; }
+
+    /* ── Main content ──────────────────────────────────────────────── */
+    #main {
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Welcome / Placeholder */
+    #welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--text-muted);
+      gap: 10px;
+      padding: 40px 20px;
+    }
+    #welcome .wicon { font-size: 3rem; }
+    #welcome h2 { font-size: 1.3rem; color: var(--text); }
+    #welcome p  { font-size: .93rem; line-height: 1.6; max-width: 380px; }
+    #welcome .hint { font-size: .82rem; color: var(--text-muted); }
+
+    /* Image detail */
+    #viewer { display: none; flex-direction: column; gap: 12px; }
+
+    .viewer-datetime {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      box-shadow: var(--shadow-sm);
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .viewer-body {
+      display: grid;
+      grid-template-columns: 1fr 270px;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .img-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .img-card img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .right-col { display: flex; flex-direction: column; gap: 12px; }
+
+    /* Cards */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card-title {
+      font-size: .8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    /* Notification */
+    .notif-title   { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+    .notif-msg     { font-size: .88rem; color: var(--text-muted); margin-bottom: 8px; }
+    .notif-list    { display: flex; flex-direction: column; gap: 5px; }
+    .notif-row     { display: flex; align-items: center; gap: 8px; font-size: .88rem; }
+    .notif-dot     { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    .notif-empty   { color: var(--text-muted); font-size: .9rem; }
+
+    /* Legend */
+    .legend-list   { display: flex; flex-direction: column; gap: 6px; }
+    .legend-row    { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+    .legend-swatch {
+      width: 20px; height: 10px; border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* ── Statistics section ────────────────────────────────────────── */
+    #stats-section {
+      display: none;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding: 20px 24px 24px;
+      flex-shrink: 0;
+    }
+
+    #stats-section h2 {
+      font-size: 1.05rem; font-weight: 700; margin-bottom: 16px;
+    }
+
+    .stats-numbers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-chip {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 10px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 100px;
+    }
+    .stat-val { font-size: 1.6rem; font-weight: 800; color: var(--primary); }
+    .stat-lbl { font-size: .75rem; color: var(--text-muted); margin-top: 1px; }
+
+    .chart-wrap { width: 100%; overflow-x: auto; }
+    #stats-chart { display: block; }
+
+    .no-data { color: var(--text-muted); font-size: .9rem; padding: 20px 0; }
+
+    /* ── Responsive: Tablet ────────────────────────────────────────── */
+    @media (max-width: 960px) {
+      .viewer-body { grid-template-columns: 1fr; }
+      .right-col    { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ── Responsive: Mobile ────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      #app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 190px 1fr;
+        overflow: visible;
+      }
+      #sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+        overflow-y: hidden;
+        display: flex;
+        align-items: stretch;
+      }
+      #sidebar #sidebar-empty {
+        width: 100%;
+      }
+      /* horizontal scroll strip */
+      #image-list {
+        display: flex;
+        flex-direction: row;
+        min-width: max-content;
+      }
+      .img-item {
+        flex-direction: column;
+        align-items: center;
+        min-width: 90px;
+        border-bottom: none;
+        border-right: 1px solid var(--border);
+        padding: 10px 8px;
+        text-align: center;
+      }
+      .img-item.active {
+        border-left: none;
+        border-top: 3px solid var(--primary);
+        padding-top: 7px;
+        padding-left: 8px;
+      }
+      .item-info { width: 100%; }
+      .item-date { font-size: .76rem; }
+      .item-time { font-size: .72rem; }
+      .item-badge { display: none; }
+      #main { padding: 10px; }
+      .viewer-datetime { font-size: .95rem; }
+      .right-col { grid-template-columns: 1fr; }
+      header { gap: 8px; padding: 0 10px; }
+      .header-title { font-size: .92rem; }
+      .btn-folder { padding: 5px 10px; font-size: .80rem; }
+      .filter-btn { padding: 4px 9px; font-size: .75rem; }
+      #stats-section { padding: 14px 14px 18px; }
+    }
+
+    @media (max-width: 400px) {
+      .filter-group { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ────────────────────────────────────────────────── -->
+  <header>
+    <div class="header-title">🚗 MFG Rüsselbach · Fahrzeugauswertung</div>
+    <label class="btn-folder" title="Projektordner öffnen">
+      📁 Ordner öffnen
+      <input type="file" id="folderInput" webkitdirectory multiple>
+    </label>
+    <div class="filter-group" id="filterGroup">
+      <button class="filter-btn active" data-f="all">Alle</button>
+      <button class="filter-btn" data-f="vehicles">🚗 Fahrzeuge</button>
+      <button class="filter-btn" data-f="empty">🌿 Leer</button>
+    </div>
+  </header>
+
+  <!-- ── Sidebar + Main ────────────────────────────────────────── -->
+  <div id="app">
+
+    <nav id="sidebar">
+      <div id="image-list">
+        <div id="sidebar-empty">📂 Noch keine Bilder geladen</div>
+      </div>
+    </nav>
+
+    <div id="main">
+      <!-- Welcome -->
+      <div id="welcome">
+        <div class="wicon">📂</div>
+        <h2>Bilder laden</h2>
+        <p>
+          Klicke auf <strong>Ordner öffnen</strong> und wähle den Ordner
+          <strong>mfgruesselbach</strong> (oder einen übergeordneten Ordner) aus.
+        </p>
+        <p class="hint">
+          Die Bilder befinden sich in den Unterordnern
+          <em>Fahrzeug erkannt</em> und <em>Kein Fahrzeug</em>.
+        </p>
+      </div>
+
+      <!-- Image detail (initially hidden) -->
+      <div id="viewer">
+        <div class="viewer-datetime" id="viewerDatetime">–</div>
+        <div class="viewer-body">
+          <div class="img-card">
+            <img id="viewerImg" src="" alt="Webcam-Bild">
+          </div>
+          <div class="right-col">
+            <!-- Notification -->
+            <div class="card" id="notifCard">
+              <div class="card-title">📬 Benachrichtigung</div>
+              <div id="notifContent"></div>
+            </div>
+            <!-- Legend -->
+            <div class="card">
+              <div class="card-title">🎨 Legende</div>
+              <div class="legend-list">
+                <div class="legend-row">
+                  <span class="legend-swatch" style="background:var(--c-auto)"></span>Auto
+                </div>
+                <div class="legend-row">
+                  <span class="legend-swatch" style="background:var(--c-motorrad)"></span>Motorrad
+                </div>
+                <div class="legend-row">
+                  <span class="legend-swatch" style="background:var(--c-bus)"></span>Bus
+                </div>
+                <div class="legend-row">
+                  <span class="legend-swatch" style="background:var(--c-lkw)"></span>LKW
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Statistics ────────────────────────────────────────────── -->
+  <section id="stats-section">
+    <h2>📊 Statistik – Fahrzeuge nach Datum</h2>
+    <div class="stats-numbers" id="statsNumbers"></div>
+    <div class="chart-wrap">
+      <canvas id="stats-chart"></canvas>
+    </div>
+  </section>
+
+  <script>
+  /* ================================================================
+     Konfiguration
+  ================================================================ */
+  const CLASS_COLORS = {
+    Auto:     'rgb(255,50,50)',
+    Motorrad: 'rgb(255,165,0)',
+    Bus:      'rgb(50,200,50)',
+    LKW:      'rgb(80,130,255)',
+  };
+
+  /* ================================================================
+     Zustand
+  ================================================================ */
+  let allImages   = [];   // alle geladenen Bild-Einträge
+  let filter      = 'all';
+  let selectedIdx = null;
+  const blobUrls  = {};   // key → Blob-URL (gecacht)
+
+  /* ================================================================
+     Ordner laden
+  ================================================================ */
+  document.getElementById('folderInput').addEventListener('change', async (e) => {
+    // Alte Blob-URLs freigeben
+    for (const u of Object.values(blobUrls)) URL.revokeObjectURL(u);
+    Object.keys(blobUrls).forEach(k => delete blobUrls[k]);
+
+    const files = Array.from(e.target.files);
+
+    const jsonMap = {};  // "Ordner/Dateiname-ohne-Ext" → File
+    const imgMap  = {};  // "Ordner/Dateiname-ohne-Ext" → File
+
+    for (const file of files) {
+      const parts    = file.webkitRelativePath.split('/');
+      const filename = parts[parts.length - 1];
+      const folder   = parts.length >= 2 ? parts[parts.length - 2] : '';
+      const base     = filename.replace(/\.(jpg|jpeg|json)$/i, '');
+      const key      = folder + '/' + base;
+
+      if (/\.(jpg|jpeg)$/i.test(filename)) {
+        imgMap[key] = file;
+      } else if (/\.json$/i.test(filename)) {
+        jsonMap[key] = file;
+      }
+    }
+
+    const records = [];
+
+    for (const [key, imgFile] of Object.entries(imgMap)) {
+      const slash      = key.indexOf('/');
+      const folder     = key.substring(0, slash);
+      const base       = key.substring(slash + 1);
+      const hasVehicles = folder === 'Fahrzeug erkannt';
+
+      // Nur bekannte Unterordner berücksichtigen
+      if (folder !== 'Fahrzeug erkannt' && folder !== 'Kein Fahrzeug') continue;
+
+      let meta = null;
+      if (jsonMap[key]) {
+        try {
+          meta = JSON.parse(await jsonMap[key].text());
+        } catch (_) { /* ungültiges JSON – ignorieren */ }
+      }
+
+      if (!meta) {
+        // Metadaten aus Dateiname ableiten
+        const dt = parseTimestamp(base);
+        meta = {
+          timestamp:        base,
+          datetime_display: dt ? fmtDate(dt) : base,
+          datetime_iso:     dt ? dt.toISOString() : base,
+          has_vehicles:     hasVehicles,
+          vehicle_count:    hasVehicles ? null : 0,
+          detections:       [],
+          notification_title:   null,
+          notification_message: null,
+        };
+      }
+
+      records.push({ key, folder, base, hasVehicles, meta, imgFile });
+    }
+
+    // Neueste zuerst
+    records.sort((a, b) =>
+      (b.meta.datetime_iso || b.base).localeCompare(a.meta.datetime_iso || a.base)
+    );
+
+    allImages   = records;
+    selectedIdx = records.length > 0 ? 0 : null;
+
+    renderSidebar();
+    if (selectedIdx !== null) showDetail(selectedIdx);
+    renderStats();
+
+    document.getElementById('welcome').style.display = 'none';
+    document.getElementById('stats-section').style.display =
+      allImages.length > 0 ? 'block' : 'none';
+  });
+
+  /* ================================================================
+     Datum-Hilfsfunktionen
+  ================================================================ */
+  function parseTimestamp(s) {
+    // Format: YYYYMMDD_HHMMSS
+    const m = s.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
+    if (!m) return null;
+    return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]);
+  }
+
+  function fmtDate(dt) {
+    return dt.toLocaleString('de-DE', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  }
+
+  function dateFromMeta(meta) {
+    if (meta.datetime_iso) {
+      const d = new Date(meta.datetime_iso);
+      if (!isNaN(d)) return d;
+    }
+    return parseTimestamp(meta.timestamp);
+  }
+
+  /* ================================================================
+     Filter
+  ================================================================ */
+  document.getElementById('filterGroup').addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if (!btn) return;
+    filter = btn.dataset.f;
+    document.querySelectorAll('.filter-btn').forEach(b =>
+      b.classList.toggle('active', b === btn)
+    );
+    renderSidebar();
+    const vis = filteredImages();
+    if (vis.length > 0) showDetail(allImages.indexOf(vis[0]));
+  });
+
+  function filteredImages() {
+    if (filter === 'vehicles') return allImages.filter(r => r.hasVehicles);
+    if (filter === 'empty')    return allImages.filter(r => !r.hasVehicles);
+    return allImages;
+  }
+
+  /* ================================================================
+     Sidebar rendern
+  ================================================================ */
+  function renderSidebar() {
+    const list = document.getElementById('image-list');
+    const vis  = filteredImages();
+
+    if (vis.length === 0) {
+      list.innerHTML = '<div id="sidebar-empty">Keine Bilder gefunden.</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    vis.forEach(rec => {
+      const gIdx = allImages.indexOf(rec);
+      const dt   = dateFromMeta(rec.meta);
+      const dateS = dt
+        ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : rec.base.substring(0, 8);
+      const timeS = dt
+        ? dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+        : '';
+      const cnt   = rec.meta.vehicle_count;
+      const badge = rec.hasVehicles
+        ? `<span class="item-badge badge-v">${cnt != null ? cnt + ' 🚗' : '🚗'}</span>`
+        : '<span class="item-badge badge-e">–</span>';
+
+      const el = document.createElement('div');
+      el.className = 'img-item' + (gIdx === selectedIdx ? ' active' : '');
+      el.innerHTML = `
+        <div class="item-icon">${rec.hasVehicles ? '🚗' : '🌿'}</div>
+        <div class="item-info">
+          <div class="item-date">${dateS}</div>
+          <div class="item-time">${timeS ? timeS + ' Uhr' : ''}</div>
+        </div>
+        ${badge}
+      `;
+      el.addEventListener('click', () => showDetail(gIdx));
+      list.appendChild(el);
+    });
+  }
+
+  /* ================================================================
+     Detailansicht rendern
+  ================================================================ */
+  function showDetail(idx) {
+    selectedIdx = idx;
+    renderSidebar(); // Markierung aktualisieren
+
+    const rec = allImages[idx];
+    const dt  = dateFromMeta(rec.meta);
+
+    // Datum/Uhrzeit
+    const dtStr = dt
+      ? dt.toLocaleString('de-DE', {
+          weekday: 'long', day: '2-digit', month: 'long',
+          year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+        })
+      : rec.base;
+    document.getElementById('viewerDatetime').textContent = '📅 ' + dtStr;
+
+    // Bild (Blob-URL gecacht)
+    if (!blobUrls[rec.key]) blobUrls[rec.key] = URL.createObjectURL(rec.imgFile);
+    const img = document.getElementById('viewerImg');
+    img.src = blobUrls[rec.key];
+    img.alt = 'Webcam ' + dtStr;
+
+    // Benachrichtigung
+    document.getElementById('notifContent').innerHTML = buildNotifHtml(rec);
+
+    document.getElementById('viewer').style.display  = 'flex';
+    document.getElementById('welcome').style.display = 'none';
+  }
+
+  function buildNotifHtml(rec) {
+    const { meta, hasVehicles } = rec;
+
+    if (!hasVehicles) {
+      const title = meta.notification_title   || 'MFG Rüsselbach – Kein Fahrzeug';
+      const msg   = meta.notification_message || 'Kein Fahrzeug im Webcam-Bild erkennbar.';
+      return `
+        <div class="notif-title" style="color:#555">${esc(title)}</div>
+        <div class="notif-msg">${esc(msg)}</div>
+      `;
+    }
+
+    const cnt   = meta.vehicle_count != null ? meta.vehicle_count : '?';
+    const title = meta.notification_title   || `MFG Rüsselbach – ${cnt} Fahrzeug(e) erkannt`;
+    const msg   = meta.notification_message || `${cnt} Fahrzeug(e) im Webcam-Bild erkannt!`;
+
+    let listHtml = '';
+    if (meta.detections && meta.detections.length > 0) {
+      listHtml = '<div class="notif-list">' +
+        meta.detections.map((d, i) => {
+          const color = CLASS_COLORS[d.class] || '#ffcc00';
+          const conf  = d.confidence != null ? Math.round(d.confidence * 100) + ' %' : '';
+          return `
+            <div class="notif-row">
+              <span class="notif-dot" style="background:${color}"></span>
+              <span>${i + 1}. ${esc(d.class)}${conf ? ' – ' + conf + ' Konfidenz' : ''}</span>
+            </div>`;
+        }).join('') + '</div>';
+    }
+
+    return `
+      <div class="notif-title" style="color:#c62828">${esc(title)}</div>
+      <div class="notif-msg">${esc(msg)}</div>
+      ${listHtml}
+    `;
+  }
+
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /* ================================================================
+     Statistik
+  ================================================================ */
+  function renderStats() {
+    const section = document.getElementById('stats-section');
+    if (allImages.length === 0) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+
+    // Nach Tag gruppieren
+    const byDay = {};
+    for (const rec of allImages) {
+      const dt = dateFromMeta(rec.meta);
+      if (!dt) continue;
+      const key = dt.toLocaleDateString('de-DE',
+        { day: '2-digit', month: '2-digit', year: 'numeric' }
+      );
+      if (!byDay[key]) byDay[key] = { dt, images: 0, withV: 0, vehicles: 0 };
+      byDay[key].images++;
+      if (rec.hasVehicles) {
+        byDay[key].withV++;
+        const cnt = rec.meta.vehicle_count;
+        byDay[key].vehicles += (cnt != null && cnt !== '?') ? +cnt : 1;
+      }
+    }
+
+    const days = Object.entries(byDay)
+      .sort((a, b) => a[1].dt - b[1].dt)
+      .map(([label, d]) => ({ label, ...d }));
+
+    // Zusammenfassung
+    const totImg = allImages.length;
+    const totV   = allImages.filter(r => r.hasVehicles).length;
+    const totE   = totImg - totV;
+    const totCnt = days.reduce((s, d) => s + d.vehicles, 0);
+
+    document.getElementById('statsNumbers').innerHTML = `
+      <div class="stat-chip"><span class="stat-val">${totImg}</span><span class="stat-lbl">Bilder gesamt</span></div>
+      <div class="stat-chip"><span class="stat-val">${totV}</span><span class="stat-lbl">Mit Fahrzeugen</span></div>
+      <div class="stat-chip"><span class="stat-val">${totE}</span><span class="stat-lbl">Ohne Fahrzeuge</span></div>
+      <div class="stat-chip"><span class="stat-val">${totCnt}</span><span class="stat-lbl">Fahrzeuge erkannt</span></div>
+    `;
+
+    if (days.length === 0) {
+      document.getElementById('stats-chart').style.display = 'none';
+      return;
+    }
+
+    drawChart(days);
+  }
+
+  function drawChart(days) {
+    const canvas = document.getElementById('stats-chart');
+    canvas.style.display = 'block';
+
+    const wrap  = canvas.parentElement;
+    const dpr   = window.devicePixelRatio || 1;
+    const PAD   = { top: 24, right: 20, bottom: 56, left: 44 };
+    const BAR_H = 220;
+    // Mindestbreite pro Balken
+    const BAR_MIN_W = 38;
+    const W = Math.max(wrap.clientWidth - 4, days.length * (BAR_MIN_W + 8) + PAD.left + PAD.right);
+    const H = BAR_H;
+
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const chartW = W - PAD.left - PAD.right;
+    const chartH = H - PAD.top  - PAD.bottom;
+    const maxVal = Math.max(...days.map(d => d.vehicles), 1);
+
+    const gridLines = 4;
+
+    // Hintergrundgitter
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth   = 1;
+    for (let i = 0; i <= gridLines; i++) {
+      const y = PAD.top + chartH - (chartH / gridLines) * i;
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, y);
+      ctx.lineTo(PAD.left + chartW, y);
+      ctx.stroke();
+
+      const val = Math.round(maxVal / gridLines * i);
+      ctx.fillStyle  = '#9ca3af';
+      ctx.font       = `11px sans-serif`;
+      ctx.textAlign  = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(val, PAD.left - 6, y);
+    }
+
+    // Balken
+    const barW  = Math.min(48, (chartW / days.length) * 0.65);
+    const step  = chartW / days.length;
+
+    days.forEach((day, i) => {
+      const x   = PAD.left + i * step + (step - barW) / 2;
+      const bH  = (day.vehicles / maxVal) * chartH;
+      const y   = PAD.top + chartH - bH;
+
+      // Balken (mit/ohne Fahrzeuge)
+      const grad = ctx.createLinearGradient(0, y, 0, y + bH);
+      if (day.vehicles > 0) {
+        grad.addColorStop(0, '#ef5350');
+        grad.addColorStop(1, '#b71c1c');
+      } else {
+        grad.addColorStop(0, '#bdbdbd');
+        grad.addColorStop(1, '#9e9e9e');
+      }
+      ctx.fillStyle = grad;
+      roundRect(ctx, x, y, barW, Math.max(bH, 2), 4);
+      ctx.fill();
+
+      // Wert über dem Balken
+      if (day.vehicles > 0) {
+        ctx.fillStyle  = '#1f2937';
+        ctx.font       = 'bold 11px sans-serif';
+        ctx.textAlign  = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(day.vehicles, x + barW / 2, y - 2);
+      }
+
+      // X-Achsenbeschriftung
+      ctx.fillStyle  = '#4b5563';
+      ctx.font       = '10px sans-serif';
+      ctx.textAlign  = 'center';
+      ctx.textBaseline = 'top';
+      ctx.save();
+      ctx.translate(x + barW / 2, PAD.top + chartH + 6);
+      ctx.rotate(-Math.PI / 5);
+      ctx.fillText(day.label, 0, 0);
+      ctx.restore();
+    });
+
+    // Y-Achsen-Beschriftung
+    ctx.fillStyle  = '#6b7280';
+    ctx.font       = '11px sans-serif';
+    ctx.textAlign  = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.save();
+    ctx.translate(13, PAD.top + chartH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Fahrzeuge', 0, 0);
+    ctx.restore();
+  }
+
+  // Polyfill für ctx.roundRect
+  function roundRect(ctx, x, y, w, h, r) {
+    if (h <= 0) return;
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y,     x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h,     x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y,         x + r, y);
+    ctx.closePath();
+  }
+
+  // Diagramm bei Größenänderung neu zeichnen
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (allImages.length > 0) renderStats();
+    }, 200);
+  });
+  </script>
+</body>
+</html>
