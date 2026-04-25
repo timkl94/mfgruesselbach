@@ -93,10 +93,20 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── Statische Dateien ────────────────────────────────────────────
         # Sicherheits-Check: keine Pfad-Traversal-Versuche
-        real_path = os.path.realpath(os.path.join(BASE_DIR, path.lstrip("/")))
-        if not real_path.startswith(BASE_DIR + os.sep) and real_path != BASE_DIR:
+        # os.path.realpath löst Symlinks auf; commonpath prüft korrekt ohne
+        # startswith-Falsch-Positiv bei ähnlichen Ordnernamen.
+        candidate = os.path.realpath(
+            os.path.normpath(os.path.join(BASE_DIR, path.lstrip("/")))
+        )
+        try:
+            common = os.path.commonpath([BASE_DIR, candidate])
+        except ValueError:
             self._send_error(403, "Forbidden")
             return
+        if common != BASE_DIR:
+            self._send_error(403, "Forbidden")
+            return
+        real_path = candidate
 
         # Root → viewer.html
         if path == "/" or path == "":
