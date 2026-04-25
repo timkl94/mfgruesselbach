@@ -21,7 +21,7 @@ import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGE_FOLDERS = ["Fahrzeug erkannt", "Kein Fahrzeug"]
@@ -63,7 +63,7 @@ def build_image_list() -> list[dict]:
                 {
                     "folder": folder,
                     "filename": filename,
-                    "url": "/" + folder + "/" + filename,
+                    "url": "/" + quote(folder) + "/" + quote(filename),
                     "meta": meta,
                 }
             )
@@ -151,7 +151,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    server = HTTPServer(("localhost", port), Handler)
+    server = HTTPServer(("0.0.0.0", port), Handler)
     url = f"http://localhost:{port}"
     print()
     print("=" * 60)

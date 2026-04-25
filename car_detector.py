@@ -71,9 +71,10 @@ QUIET_HOURS_END = 6      # bis 06:00 Uhr keine Abrufe
 # Port für den integrierten Bild-Viewer-Server (http://localhost:PORT)
 SERVER_PORT = 8080
 
-# Ordner für gespeicherte Bilder
-DETECTION_FOLDER = "Fahrzeug erkannt"   # Bilder mit erkannten Fahrzeugen
-EMPTY_FOLDER = "Kein Fahrzeug"          # Bilder ohne Fahrzeugerkennung
+# Ordner für gespeicherte Bilder (absolut, relativ zum Skriptverzeichnis)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DETECTION_FOLDER = os.path.join(_SCRIPT_DIR, "Fahrzeug erkannt")
+EMPTY_FOLDER     = os.path.join(_SCRIPT_DIR, "Kein Fahrzeug")
 MAX_DETECTION_IMAGES = 20               # Maximale Anzahl gespeicherter Erkennungsbilder
 MAX_EMPTY_IMAGES = 30                   # Maximale Anzahl gespeicherter Leerbilder
 
@@ -426,7 +427,7 @@ def _start_viewer_server() -> None:
     from http.server import HTTPServer
     from server import Handler  # Handler aus server.py importieren
 
-    server = HTTPServer(("localhost", SERVER_PORT), Handler)
+    server = HTTPServer(("0.0.0.0", SERVER_PORT), Handler)
     logger.info(
         "Viewer-Server gestartet: http://localhost:%d", SERVER_PORT
     )
