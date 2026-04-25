@@ -63,7 +63,7 @@ def build_image_list() -> list[dict]:
                 {
                     "folder": folder,
                     "filename": filename,
-                    "url": "/" + quote(folder) + "/" + quote(filename),
+                    "url": quote(folder) + "/" + quote(filename),
                     "meta": meta,
                 }
             )
