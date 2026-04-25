@@ -15,6 +15,7 @@ Erweiterungen:
 
 import glob
 import io
+import json
 import logging
 import os
 import time
@@ -67,8 +68,16 @@ EMPTY_FOLDER = "Kein Fahrzeug"          # Bilder ohne Fahrzeugerkennung
 MAX_DETECTION_IMAGES = 20               # Maximale Anzahl gespeicherter Erkennungsbilder
 MAX_EMPTY_IMAGES = 30                   # Maximale Anzahl gespeicherter Leerbilder
 
-# Farbe des Rahmens um erkannte Fahrzeuge
-BBOX_COLOR = (255, 0, 0)    # Rot
+# Farben der Rahmen pro Fahrzeugklasse (R, G, B).
+# Hinweis: Diese Werte müssen mit den CSS-Variablen --c-auto, --c-motorrad,
+# --c-bus und --c-lkw in viewer.html übereinstimmen.
+CLASS_COLORS: dict[str, tuple[int, int, int]] = {
+    "Auto":     (255,  50,  50),   # Rot
+    "Motorrad": (255, 165,   0),   # Orange
+    "Bus":      ( 50, 200,  50),   # Grün
+    "LKW":      ( 80, 130, 255),   # Blau
+}
+DEFAULT_BBOX_COLOR = (255, 255,   0)   # Gelb für unbekannte Klassen
 BBOX_WIDTH = 3              # Linienbreite in Pixeln
 BBOX_TEXT_OFFSET = 14       # Pixel-Abstand des Beschriftungstexts oberhalb der Box
 
@@ -130,19 +139,54 @@ def detect_vehicles(
 
 
 def _prune_folder(folder: str, max_files: int) -> None:
-    """Löscht die ältesten Bilder, wenn die Ordner-Grenze überschritten wird."""
+    """Löscht die ältesten Bilder (und zugehörige JSON-Metadaten), wenn die Ordner-Grenze überschritten wird."""
     files = sorted(
         glob.glob(os.path.join(folder, "*.jpg")),
         key=os.path.getmtime,
     )
     while len(files) > max_files:
-        os.remove(files.pop(0))
+        jpg_path = files.pop(0)
+        os.remove(jpg_path)
+        json_path = jpg_path[:-4] + ".json"
+        if os.path.exists(json_path):
+            os.remove(json_path)
 
 
-def save_detection_image(image: Image.Image, detections: list[dict]) -> None:
+def _save_metadata_json(
+    folder: str,
+    timestamp: str,
+    detections: list[dict],
+    notification_title: str | None,
+    notification_message: str | None,
+) -> None:
+    """Speichert eine JSON-Metadatendatei neben dem Bild."""
+    dt = datetime.strptime(timestamp, "%Y%m%d_%H%M%S").replace(tzinfo=TIMEZONE)
+    meta = {
+        "timestamp": timestamp,
+        "datetime_display": dt.strftime("%d.%m.%Y %H:%M:%S %Z"),
+        "datetime_iso": dt.isoformat(),
+        "has_vehicles": bool(detections),
+        "vehicle_count": len(detections),
+        "detections": detections,
+        "notification_title": notification_title,
+        "notification_message": notification_message,
+    }
+    json_path = os.path.join(folder, f"{timestamp}.json")
+    with open(json_path, "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
+    logger.info("Metadaten gespeichert: %s", json_path)
+
+
+def save_detection_image(
+    image: Image.Image,
+    detections: list[dict],
+    notification_title: str | None = None,
+    notification_message: str | None = None,
+) -> None:
     """
     Speichert das Bild mit farbigen Bounding-Boxen in ``DETECTION_FOLDER``.
     Hält maximal ``MAX_DETECTION_IMAGES`` Bilder vor.
+    Neben dem Bild wird eine JSON-Metadaten-Datei gespeichert.
     """
     os.makedirs(DETECTION_FOLDER, exist_ok=True)
 
@@ -150,15 +194,16 @@ def save_detection_image(image: Image.Image, detections: list[dict]) -> None:
     draw = ImageDraw.Draw(annotated)
     for det in detections:
         x1, y1, x2, y2 = det["bbox"]
+        color = CLASS_COLORS.get(det["class"], DEFAULT_BBOX_COLOR)
         draw.rectangle(
             [x1, y1, x2, y2],
-            outline=BBOX_COLOR,
+            outline=color,
             width=BBOX_WIDTH,
         )
         draw.text(
             (x1, max(y1 - BBOX_TEXT_OFFSET, 0)),
             f"{det['class']} {det['confidence']:.0%}",
-            fill=BBOX_COLOR,
+            fill=color,
         )
 
     timestamp = datetime.now(tz=TIMEZONE).strftime("%Y%m%d_%H%M%S")
@@ -166,13 +211,23 @@ def save_detection_image(image: Image.Image, detections: list[dict]) -> None:
     annotated.save(filepath, format="JPEG")
     logger.info("Erkennungsbild gespeichert: %s", filepath)
 
+    _save_metadata_json(
+        DETECTION_FOLDER, timestamp, detections,
+        notification_title, notification_message,
+    )
+
     _prune_folder(DETECTION_FOLDER, MAX_DETECTION_IMAGES)
 
 
-def save_empty_image(image: Image.Image) -> None:
+def save_empty_image(
+    image: Image.Image,
+    notification_title: str | None = None,
+    notification_message: str | None = None,
+) -> None:
     """
     Speichert das Bild ohne Erkennungen in ``EMPTY_FOLDER``.
     Hält maximal ``MAX_EMPTY_IMAGES`` Bilder vor.
+    Neben dem Bild wird eine JSON-Metadaten-Datei gespeichert.
     """
     os.makedirs(EMPTY_FOLDER, exist_ok=True)
 
@@ -180,6 +235,11 @@ def save_empty_image(image: Image.Image) -> None:
     filepath = os.path.join(EMPTY_FOLDER, f"{timestamp}.jpg")
     image.save(filepath, format="JPEG")
     logger.info("Leerbild gespeichert: %s", filepath)
+
+    _save_metadata_json(
+        EMPTY_FOLDER, timestamp, [],
+        notification_title, notification_message,
+    )
 
     _prune_folder(EMPTY_FOLDER, MAX_EMPTY_IMAGES)
 
@@ -191,7 +251,7 @@ def send_startup_notification() -> None:
             NTFY_TOPIC_URL,
             data="Webcam-Fahrzeugerkennung gestartet.".encode("utf-8"),
             headers={
-                "Title": "MFG Ruesselbach - Skript gestartet",
+                "Title": "MFG Rüsselbach - Skript gestartet",
                 "Priority": "default",
                 "Tags": "white_check_mark",
             },
@@ -226,7 +286,7 @@ def notify(detections: list[dict]) -> None:
         logger.info("Benachrichtigung: Kein Fahrzeug mehr erkannt.")
 
         ntfy_message = "Kein Fahrzeug mehr erkannt"
-        ntfy_title = "MFG Ruesselbach - Kein Fahrzeug"
+        ntfy_title = "MFG Rüsselbach - Kein Fahrzeug"
         ntfy_tags = "white_check_mark"
     else:
         lines = [
@@ -248,7 +308,7 @@ def notify(detections: list[dict]) -> None:
         logger.info("Benachrichtigung: %d Fahrzeug(e) erkannt.", count)
 
         ntfy_message = f"{count} Fahrzeug(e) erkannt"
-        ntfy_title = f"MFG Ruesselbach - {count} Fahrzeug(e) erkannt"
+        ntfy_title = f"MFG Rüsselbach - {count} Fahrzeug(e) erkannt"
         ntfy_tags = "car"
 
     # Push-Benachrichtigung via ntfy
@@ -310,11 +370,22 @@ def check_for_vehicles(model: YOLO) -> None:
     detections = detect_vehicles(image, model)
     count = len(detections)
 
+    # Benachrichtigungsinhalt vorab bestimmen, damit er in den Metadaten landet
+    notif_title: str | None = None
+    notif_message: str | None = None
+    if count != _last_notified_count:
+        if count > 0:
+            notif_title = f"MFG Rüsselbach - {count} Fahrzeug(e) erkannt"
+            notif_message = f"{count} Fahrzeug(e) erkannt"
+        elif _last_notified_count > 0:
+            notif_title = "MFG Rüsselbach - Kein Fahrzeug"
+            notif_message = "Kein Fahrzeug mehr erkannt"
+
     # Bilder immer speichern
     if detections:
-        save_detection_image(image, detections)
+        save_detection_image(image, detections, notif_title, notif_message)
     else:
-        save_empty_image(image)
+        save_empty_image(image, notif_title, notif_message)
 
     # Benachrichtigung nur senden, wenn sich die Anzahl geändert hat;
     # beim ersten Durchlauf (_last_notified_count == -1) nur bei Fahrzeugen.
