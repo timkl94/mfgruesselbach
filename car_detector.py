@@ -5,12 +5,17 @@ Webcam-Fahrzeugerkennung
 Ruft alle 15 Minuten das Bild der Webcam ab und benachrichtigt,
 wenn ein Fahrzeug erkannt wird.
 
+Startet außerdem automatisch den Bild-Viewer-Server (aus server.py)
+im Hintergrund, sodass die Ergebnisse unter http://localhost:8080
+eingesehen werden können.
+
 Benutzung:
     python car_detector.py
 
 Erweiterungen:
     Für E-Mail- oder App-Benachrichtigungen die Funktion `notify()`
     am Ende dieser Datei anpassen.
+    Den Server-Port kann über die Konstante SERVER_PORT angepasst werden.
 """
 
 import glob
@@ -18,6 +23,7 @@ import io
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -61,6 +67,9 @@ VEHICLE_CLASSES = {
 # DST-bewusst dank ZoneInfo – gilt also sowohl für Sommer- als auch Winterzeit)
 QUIET_HOURS_START = 22   # ab 22:00 Uhr keine Abrufe
 QUIET_HOURS_END = 6      # bis 06:00 Uhr keine Abrufe
+
+# Port für den integrierten Bild-Viewer-Server (http://localhost:PORT)
+SERVER_PORT = 8080
 
 # Ordner für gespeicherte Bilder
 DETECTION_FOLDER = "Fahrzeug erkannt"   # Bilder mit erkannten Fahrzeugen
@@ -408,6 +417,23 @@ def check_for_vehicles(model: YOLO) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Integrierter Viewer-Server
+# ---------------------------------------------------------------------------
+
+
+def _start_viewer_server() -> None:
+    """Startet den HTTP-Viewer-Server aus server.py in einem Hintergrund-Thread."""
+    from http.server import HTTPServer
+    from server import Handler  # Handler aus server.py importieren
+
+    server = HTTPServer(("localhost", SERVER_PORT), Handler)
+    logger.info(
+        "Viewer-Server gestartet: http://localhost:%d", SERVER_PORT
+    )
+    server.serve_forever()
+
+
+# ---------------------------------------------------------------------------
 # Einstiegspunkt
 # ---------------------------------------------------------------------------
 
@@ -416,6 +442,10 @@ def main() -> None:
     logger.info("Starte Webcam-Fahrzeugerkennung …")
     logger.info("Lade YOLOv8-Modell (%s) …", YOLO_MODEL)
     model = YOLO(YOLO_MODEL)
+
+    # Viewer-Server im Hintergrund starten
+    server_thread = threading.Thread(target=_start_viewer_server, daemon=True)
+    server_thread.start()
 
     # Push-Benachrichtigung beim Start senden
     send_startup_notification()
