@@ -251,43 +251,6 @@
       width: 20px; height: 10px; border-radius: 3px; flex-shrink: 0;
     }
 
-    /* ── Statistics section ────────────────────────────────────────── */
-    #stats-section {
-      display: none;
-      background: var(--card);
-      border-top: 1px solid var(--border);
-      padding: 20px 24px 24px;
-      flex-shrink: 0;
-    }
-
-    #stats-section h2 {
-      font-size: 1.05rem; font-weight: 700; margin-bottom: 16px;
-    }
-
-    .stats-numbers {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .stat-chip {
-      background: var(--bg);
-      border-radius: 8px;
-      padding: 10px 18px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-width: 100px;
-    }
-    .stat-val { font-size: 1.6rem; font-weight: 800; color: var(--primary); }
-    .stat-lbl { font-size: .75rem; color: var(--text-muted); margin-top: 1px; }
-
-    .chart-wrap { width: 100%; overflow-x: auto; }
-    #stats-chart { display: block; }
-
-    .no-data { color: var(--text-muted); font-size: .9rem; padding: 20px 0; }
-
     /* ── Responsive: Tablet ────────────────────────────────────────── */
     @media (max-width: 960px) {
       .viewer-body { grid-template-columns: 1fr; }
@@ -343,7 +306,6 @@
       header { gap: 8px; padding: 0 10px; }
       .header-title { font-size: .92rem; }
       .filter-btn { padding: 4px 9px; font-size: .75rem; }
-      #stats-section { padding: 14px 14px 18px; }
     }
 
     @media (max-width: 400px) {
@@ -423,15 +385,6 @@
     </div>
   </div>
 
-  <!-- ── Statistics ────────────────────────────────────────────── -->
-  <section id="stats-section">
-    <h2>📊 Statistik – Fahrzeuge nach Datum</h2>
-    <div class="stats-numbers" id="statsNumbers"></div>
-    <div class="chart-wrap">
-      <canvas id="stats-chart"></canvas>
-    </div>
-  </section>
-
   <script>
   /* ================================================================
      Konfiguration
@@ -491,10 +444,6 @@
 
     renderSidebar();
     if (selectedIdx !== null) showDetail(selectedIdx);
-    renderStats();
-
-    document.getElementById('stats-section').style.display =
-      allImages.length > 0 ? 'block' : 'none';
 
     if (allImages.length > 0) {
       document.getElementById('welcome').style.display = 'none';
@@ -674,183 +623,6 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
-
-  /* ================================================================
-     Statistik
-  ================================================================ */
-  function renderStats() {
-    const section = document.getElementById('stats-section');
-    if (allImages.length === 0) { section.style.display = 'none'; return; }
-    section.style.display = 'block';
-
-    // Nach Tag gruppieren
-    const byDay = {};
-    for (const rec of allImages) {
-      const dt = dateFromMeta(rec.meta);
-      if (!dt) continue;
-      const key = dt.toLocaleDateString('de-DE',
-        { day: '2-digit', month: '2-digit', year: 'numeric' }
-      );
-      if (!byDay[key]) byDay[key] = { dt, images: 0, withV: 0, vehicles: 0 };
-      byDay[key].images++;
-      if (rec.hasVehicles) {
-        byDay[key].withV++;
-        const cnt = rec.meta.vehicle_count;
-        byDay[key].vehicles += (cnt != null && cnt !== '?') ? +cnt : 1;
-      }
-    }
-
-    const days = Object.entries(byDay)
-      .sort((a, b) => a[1].dt - b[1].dt)
-      .map(([label, d]) => ({ label, ...d }));
-
-    // Zusammenfassung
-    const totImg = allImages.length;
-    const totV   = allImages.filter(r => r.hasVehicles).length;
-    const totE   = totImg - totV;
-    const totCnt = days.reduce((s, d) => s + d.vehicles, 0);
-
-    document.getElementById('statsNumbers').innerHTML = `
-      <div class="stat-chip"><span class="stat-val">${totImg}</span><span class="stat-lbl">Bilder gesamt</span></div>
-      <div class="stat-chip"><span class="stat-val">${totV}</span><span class="stat-lbl">Mit Fahrzeugen</span></div>
-      <div class="stat-chip"><span class="stat-val">${totE}</span><span class="stat-lbl">Ohne Fahrzeuge</span></div>
-      <div class="stat-chip"><span class="stat-val">${totCnt}</span><span class="stat-lbl">Fahrzeuge erkannt</span></div>
-    `;
-
-    if (days.length === 0) {
-      document.getElementById('stats-chart').style.display = 'none';
-      return;
-    }
-
-    drawChart(days);
-  }
-
-  function drawChart(days) {
-    const canvas = document.getElementById('stats-chart');
-    canvas.style.display = 'block';
-
-    const wrap  = canvas.parentElement;
-    const dpr   = window.devicePixelRatio || 1;
-    const PAD   = { top: 24, right: 20, bottom: 56, left: 44 };
-    const BAR_H = 220;
-    // Mindestbreite pro Balken
-    const BAR_MIN_W = 38;
-    const W = Math.max(wrap.clientWidth - 4, days.length * (BAR_MIN_W + 8) + PAD.left + PAD.right);
-    const H = BAR_H;
-
-    canvas.width  = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
-
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, W, H);
-
-    const chartW = W - PAD.left - PAD.right;
-    const chartH = H - PAD.top  - PAD.bottom;
-    const maxVal = Math.max(...days.map(d => d.vehicles), 1);
-
-    const gridLines = 4;
-
-    // Hintergrundgitter
-    ctx.strokeStyle = '#e5e7eb';
-    ctx.lineWidth   = 1;
-    for (let i = 0; i <= gridLines; i++) {
-      const y = PAD.top + chartH - (chartH / gridLines) * i;
-      ctx.beginPath();
-      ctx.moveTo(PAD.left, y);
-      ctx.lineTo(PAD.left + chartW, y);
-      ctx.stroke();
-
-      const val = Math.round(maxVal / gridLines * i);
-      ctx.fillStyle  = '#9ca3af';
-      ctx.font       = `11px sans-serif`;
-      ctx.textAlign  = 'right';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(val, PAD.left - 6, y);
-    }
-
-    // Balken
-    const barW  = Math.min(48, (chartW / days.length) * 0.65);
-    const step  = chartW / days.length;
-
-    days.forEach((day, i) => {
-      const x   = PAD.left + i * step + (step - barW) / 2;
-      const bH  = (day.vehicles / maxVal) * chartH;
-      const y   = PAD.top + chartH - bH;
-
-      // Balken (mit/ohne Fahrzeuge)
-      const grad = ctx.createLinearGradient(0, y, 0, y + bH);
-      if (day.vehicles > 0) {
-        grad.addColorStop(0, '#ef5350');
-        grad.addColorStop(1, '#b71c1c');
-      } else {
-        grad.addColorStop(0, '#bdbdbd');
-        grad.addColorStop(1, '#9e9e9e');
-      }
-      ctx.fillStyle = grad;
-      roundRect(ctx, x, y, barW, Math.max(bH, 2), 4);
-      ctx.fill();
-
-      // Wert über dem Balken
-      if (day.vehicles > 0) {
-        ctx.fillStyle  = '#1f2937';
-        ctx.font       = 'bold 11px sans-serif';
-        ctx.textAlign  = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(day.vehicles, x + barW / 2, y - 2);
-      }
-
-      // X-Achsenbeschriftung
-      ctx.fillStyle  = '#4b5563';
-      ctx.font       = '10px sans-serif';
-      ctx.textAlign  = 'center';
-      ctx.textBaseline = 'top';
-      ctx.save();
-      ctx.translate(x + barW / 2, PAD.top + chartH + 6);
-      ctx.rotate(-Math.PI / 5);
-      ctx.fillText(day.label, 0, 0);
-      ctx.restore();
-    });
-
-    // Y-Achsen-Beschriftung
-    ctx.fillStyle  = '#6b7280';
-    ctx.font       = '11px sans-serif';
-    ctx.textAlign  = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.save();
-    ctx.translate(13, PAD.top + chartH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText('Fahrzeuge', 0, 0);
-    ctx.restore();
-  }
-
-  // Polyfill für ctx.roundRect
-  function roundRect(ctx, x, y, w, h, r) {
-    if (h <= 0) return;
-    r = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y,     x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h,     x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y,         x + r, y);
-    ctx.closePath();
-  }
-
-  // Diagramm bei Größenänderung neu zeichnen
-  let resizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (allImages.length > 0) renderStats();
-    }, 200);
-  });
 
   // Beim Start versuchen, Bilder automatisch vom Server zu laden
   tryAutoLoad();
