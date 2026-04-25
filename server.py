@@ -3,7 +3,7 @@
 Lokaler Bild-Viewer-Server
 ==========================
 Startet einen einfachen HTTP-Server, der viewer.html zusammen mit den
-Bild-Ordnern "Fahrzeug erkannt" und "Kein Fahrzeug" ausliefert und
+Bild-Ordnern "Fahrzeug_erkannt" und "Kein_Fahrzeug" ausliefert und
 einen JSON-API-Endpunkt bereitstellt.
 
 Benutzung:
@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import quote, unquote
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_FOLDERS = ["Fahrzeug erkannt", "Kein Fahrzeug"]
+IMAGE_FOLDERS = ["Fahrzeug_erkannt", "Kein_Fahrzeug"]
 
 
 def _read_json(path: str) -> dict | None:
@@ -53,8 +53,8 @@ def build_image_list() -> list[dict]:
                     "timestamp": base,
                     "datetime_display": base,
                     "datetime_iso": base,
-                    "has_vehicles": folder == "Fahrzeug erkannt",
-                    "vehicle_count": None if folder == "Fahrzeug erkannt" else 0,
+                    "has_vehicles": folder == "Fahrzeug_erkannt",
+                    "vehicle_count": None if folder == "Fahrzeug_erkannt" else 0,
                     "detections": [],
                     "notification_title": None,
                     "notification_message": None,
