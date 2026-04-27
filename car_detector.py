@@ -56,11 +56,9 @@ TIMEZONE = ZoneInfo("Europe/Berlin")
 NTFY_TOPIC_URL = "https://ntfy.sh/mfgRuesselbachAktuellePiloten"
 
 # Fahrzeug-Klassen aus dem COCO-Datensatz (wird von YOLOv8 verwendet)
+# Nur Autos werden erkannt.
 VEHICLE_CLASSES = {
     2: "Auto",
-    3: "Motorrad",
-    5: "Bus",
-    7: "LKW",
 }
 
 # Nachtruhe: Keine Bildabrufe zwischen 22 Uhr und 6 Uhr (Berliner Ortszeit,
@@ -79,13 +77,9 @@ MAX_DETECTION_IMAGES = 20               # Maximale Anzahl gespeicherter Erkennun
 MAX_EMPTY_IMAGES = 30                   # Maximale Anzahl gespeicherter Leerbilder
 
 # Farben der Rahmen pro Fahrzeugklasse (R, G, B).
-# Hinweis: Diese Werte müssen mit den CSS-Variablen --c-auto, --c-motorrad,
-# --c-bus und --c-lkw in viewer.html übereinstimmen.
+# Hinweis: Dieser Wert muss mit der CSS-Variable --c-auto in viewer.html übereinstimmen.
 CLASS_COLORS: dict[str, tuple[int, int, int]] = {
     "Auto":     (255,  50,  50),   # Rot
-    "Motorrad": (255, 165,   0),   # Orange
-    "Bus":      ( 50, 200,  50),   # Grün
-    "LKW":      ( 80, 130, 255),   # Blau
 }
 DEFAULT_BBOX_COLOR = (255, 255,   0)   # Gelb für unbekannte Klassen
 BBOX_WIDTH = 3              # Linienbreite in Pixeln
