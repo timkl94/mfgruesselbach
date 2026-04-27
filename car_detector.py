@@ -261,7 +261,7 @@ def send_startup_notification() -> None:
             NTFY_TOPIC_URL,
             data="Webcam-Fahrzeugerkennung gestartet.".encode("utf-8"),
             headers={
-                "Title": "MFG Rüsselbach - Skript gestartet",
+                "Title": "MFG Ruesselbach - Skript gestartet",
                 "Priority": "default",
                 "Tags": "white_check_mark",
             },
@@ -296,7 +296,7 @@ def notify(detections: list[dict]) -> None:
         logger.info("Benachrichtigung: Kein Fahrzeug mehr erkannt.")
 
         ntfy_message = "Kein Fahrzeug mehr erkannt"
-        ntfy_title = "MFG Rüsselbach - Kein Fahrzeug"
+        ntfy_title = "MFG Ruesselbach - Kein Fahrzeug"
         ntfy_tags = "white_check_mark"
     else:
         lines = [
@@ -318,7 +318,7 @@ def notify(detections: list[dict]) -> None:
         logger.info("Benachrichtigung: %d Fahrzeug(e) erkannt.", count)
 
         ntfy_message = f"{count} Fahrzeug(e) erkannt"
-        ntfy_title = f"MFG Rüsselbach - {count} Fahrzeug(e) erkannt"
+        ntfy_title = f"MFG Ruesselbach - {count} Fahrzeug(e) erkannt"
         ntfy_tags = "car"
 
     # Push-Benachrichtigung via ntfy
@@ -385,10 +385,10 @@ def check_for_vehicles(model: YOLO) -> None:
     notif_message: str | None = None
     if count != _last_notified_count:
         if count > 0:
-            notif_title = f"MFG Rüsselbach - {count} Fahrzeug(e) erkannt"
+            notif_title = f"MFG Ruesselbach - {count} Fahrzeug(e) erkannt"
             notif_message = f"{count} Fahrzeug(e) erkannt"
         elif _last_notified_count > 0:
-            notif_title = "MFG Rüsselbach - Kein Fahrzeug"
+            notif_title = "MFG Ruesselbach - Kein Fahrzeug"
             notif_message = "Kein Fahrzeug mehr erkannt"
 
     # Bilder immer speichern
