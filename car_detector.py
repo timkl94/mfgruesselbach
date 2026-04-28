@@ -73,8 +73,8 @@ SERVER_PORT = 8080
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DETECTION_FOLDER = os.path.join(_SCRIPT_DIR, "Fahrzeug_erkannt")
 EMPTY_FOLDER     = os.path.join(_SCRIPT_DIR, "Kein_Fahrzeug")
-MAX_DETECTION_IMAGES = 20               # Maximale Anzahl gespeicherter Erkennungsbilder
-MAX_EMPTY_IMAGES = 30                   # Maximale Anzahl gespeicherter Leerbilder
+MAX_DETECTION_IMAGES = 50               # Maximale Anzahl gespeicherter Erkennungsbilder
+MAX_EMPTY_IMAGES = 40                   # Maximale Anzahl gespeicherter Leerbilder
 
 # Farben der Rahmen pro Fahrzeugklasse (R, G, B).
 # Hinweis: Dieser Wert muss mit der CSS-Variable --c-auto in viewer.html übereinstimmen.
