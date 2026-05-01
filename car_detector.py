@@ -252,7 +252,7 @@ def send_startup_notification() -> None:
     """Sendet eine Push-Benachrichtigung beim Skriptstart via ntfy."""
     try:
         requests.post(
-            NTFY_TOPIC_URL,
+            "https://ntfy.sh/mfgRuesselbachAdmin",
             data="Webcam-Fahrzeugerkennung gestartet.".encode("utf-8"),
             headers={
                 "Title": "MFG Ruesselbach - Skript gestartet",
